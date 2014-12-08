@@ -353,6 +353,8 @@ d3dformat_to_string(D3DFORMAT fmt)
     case D3DFMT_DXT5: return "D3DFMT_DXT5";
     case D3DFMT_ATI1: return "D3DFMT_ATI1";
     case D3DFMT_ATI2: return "D3DFMT_ATI2";
+    case D3DFMT_A2M1: return "D3DFMT_A2M1";
+    case D3DFMT_A2M0: return "D3DFMT_A2M0";
     case D3DFMT_D16_LOCKABLE: return "D3DFMT_D16_LOCKABLE";
     case D3DFMT_D32: return "D3DFMT_D32";
     case D3DFMT_D15S1: return "D3DFMT_D15S1";
@@ -382,10 +384,14 @@ d3dformat_to_string(D3DFORMAT fmt)
     case D3DFMT_BINARYBUFFER: return "D3DFMT_BINARYBUFFER";
     case D3DFMT_DF16: return "D3DFMT_DF16";
     case D3DFMT_DF24: return "D3DFMT_DF24";
+    case D3DFMT_ATOC: return "D3DFMT_ATOC";
     case D3DFMT_INTZ: return "D3DFMT_INTZ";
     case D3DFMT_NVDB: return "D3DFMT_NVDB";
+    case D3DFMT_NVHS: return "D3DFMT_NVHS";
+    case D3DFMT_NVHU: return "D3DFMT_NVHU";
     case D3DFMT_RESZ: return "D3DFMT_RESZ";
     case D3DFMT_NULL: return "D3DFMT_NULL";
+
     default:
         break;
     }

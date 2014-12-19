@@ -748,13 +748,6 @@ tx_cond(struct shader_translator *tx)
    return &tx->cond_labels[tx->cond_depth - 1];
 }
 
-static INLINE unsigned *
-tx_elsecond(struct shader_translator *tx)
-{
-   assert(tx->cond_depth);
-   return &tx->cond_labels[tx->cond_depth - 1];
-}
-
 static INLINE void
 tx_endcond(struct shader_translator *tx)
 {
@@ -762,6 +755,15 @@ tx_endcond(struct shader_translator *tx)
    tx->cond_depth--;
    ureg_fixup_label(tx->ureg, tx->cond_labels[tx->cond_depth],
                     ureg_get_instruction_number(tx->ureg));
+}
+
+static INLINE unsigned *
+tx_elsecond(struct shader_translator *tx)
+{
+   assert(tx->cond_depth);
+   tx_endcond(tx);
+   return tx_cond(tx);
+   //return &tx->cond_labels[tx->cond_depth - 1];
 }
 
 static INLINE struct ureg_dst

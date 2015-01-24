@@ -191,6 +191,7 @@ NineAdapter9_CheckDeviceType( struct NineAdapter9 *This,
 {
     struct pipe_screen *screen;
     enum pipe_format dfmt, bfmt;
+    boolean windowed = (bWindowed!=0);
     HRESULT hr;
 
     DBG("This=%p DevType=%s AdapterFormat=%s BackBufferFormat=%s "
@@ -198,7 +199,7 @@ NineAdapter9_CheckDeviceType( struct NineAdapter9 *This,
         d3dformat_to_string(AdapterFormat),
         d3dformat_to_string(BackBufferFormat), bWindowed);
 
-    user_assert(backbuffer_format(AdapterFormat, BackBufferFormat, bWindowed),
+    user_assert(backbuffer_format(AdapterFormat, BackBufferFormat, windowed),
                 D3DERR_NOTAVAILABLE);
 
     hr = NineAdapter9_GetScreen(This, DevType, &screen);

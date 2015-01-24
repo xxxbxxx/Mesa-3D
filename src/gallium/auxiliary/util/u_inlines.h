@@ -195,7 +195,7 @@ pipe_surface_reset(struct pipe_context *ctx, struct pipe_surface* ps,
    ps->width = u_minify(pt->width0, level);
    ps->height = u_minify(pt->height0, level);
    ps->u.tex.level = level;
-   ps->u.tex.first_layer = ps->u.tex.last_layer = layer;
+   ps->u.tex.first_layer = ps->u.tex.last_layer = (unsigned short)layer;
    ps->context = ctx;
 }
 
@@ -244,7 +244,7 @@ pipe_buffer_create( struct pipe_screen *screen,
    buffer.target = PIPE_BUFFER;
    buffer.format = PIPE_FORMAT_R8_UNORM; /* want TYPELESS or similar */
    buffer.bind = bind;
-   buffer.usage = usage;
+   buffer.usage = (unsigned char)usage;
    buffer.flags = 0;
    buffer.width0 = size;
    buffer.height0 = 1;

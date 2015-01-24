@@ -659,7 +659,7 @@ static INLINE unsigned
 util_logbase2(unsigned n)
 {
 #if defined(PIPE_CC_GCC)
-   return ((sizeof(unsigned) * 8 - 1) - __builtin_clz(n | 1));
+   return ((unsigned)(sizeof(unsigned) * 8 - 1) - __builtin_clz(n | 1));
 #else
    unsigned pos = 0;
    if (n >= 1<<16) { n >>= 16; pos += 16; }
@@ -811,8 +811,8 @@ util_bswap64(uint64_t n)
 static INLINE uint16_t
 util_bswap16(uint16_t n)
 {
-   return (n >> 8) |
-          (n << 8);
+   return (uint16_t)((n >> 8) |
+                     (n << 8));
 }
 
 static INLINE void*
@@ -905,13 +905,13 @@ do {                                     \
 static INLINE uint32_t
 util_unsigned_fixed(float value, unsigned frac_bits)
 {
-   return value < 0 ? 0 : (uint32_t)(value * (1<<frac_bits));
+   return value < 0 ? 0 : (uint32_t)(value * (float)(1<<frac_bits));
 }
 
 static INLINE int32_t
 util_signed_fixed(float value, unsigned frac_bits)
 {
-   return (int32_t)(value * (1<<frac_bits));
+   return (int32_t)(value * (float)(1<<frac_bits));
 }
 
 unsigned

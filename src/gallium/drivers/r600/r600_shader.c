@@ -2827,7 +2827,7 @@ static int tgsi_setup_trig(struct r600_shader_ctx *ctx)
 	struct r600_bytecode_alu alu;
 
 	memset(&alu, 0, sizeof(struct r600_bytecode_alu));
-	alu.op = ALU_OP3_MULADD;
+ 	alu.op = ALU_OP3_MULADD_IEEE;
 	alu.is_op3 = 1;
 
 	alu.dst.chan = 0;
@@ -2861,7 +2861,7 @@ static int tgsi_setup_trig(struct r600_shader_ctx *ctx)
 		return r;
 
 	memset(&alu, 0, sizeof(struct r600_bytecode_alu));
-	alu.op = ALU_OP3_MULADD;
+ 	alu.op = ALU_OP3_MULADD_IEEE;
 	alu.is_op3 = 1;
 
 	alu.dst.chan = 0;
@@ -3408,7 +3408,7 @@ static int tgsi_pow(struct r600_shader_ctx *ctx)
 		return r;
 	/* b * LOG2(a) */
 	memset(&alu, 0, sizeof(struct r600_bytecode_alu));
-	alu.op = ALU_OP2_MUL;
+ 	alu.op = ALU_OP2_MUL_IEEE;
 	r600_bytecode_src(&alu.src[0], &ctx->src[1], 0);
 	alu.src[1].sel = ctx->temp_reg;
 	alu.dst.sel = ctx->temp_reg;
@@ -3621,7 +3621,7 @@ static int tgsi_divmod(struct r600_shader_ctx *ctx, int mod, int signed_op)
 			}
 
 			memset(&alu, 0, sizeof(struct r600_bytecode_alu));
-			alu.op = ALU_OP2_MUL;
+ 			alu.op = ALU_OP2_MUL_IEEE;
 
 			alu.src[0].sel = tmp0;
 			alu.src[0].chan = 0;
@@ -4744,7 +4744,7 @@ static int tgsi_interp_egcm(struct r600_shader_ctx *ctx)
 
 		for (i = 0; i < 2; i++) {
 			memset(&alu, 0, sizeof(struct r600_bytecode_alu));
-			alu.op = ALU_OP3_MULADD;
+ 			alu.op = ALU_OP3_MULADD_IEEE;
 			alu.is_op3 = 1;
 			alu.src[0].sel = gradientsH;
 			alu.src[0].chan = i;
@@ -4768,7 +4768,7 @@ static int tgsi_interp_egcm(struct r600_shader_ctx *ctx)
 
 		for (i = 0; i < 2; i++) {
 			memset(&alu, 0, sizeof(struct r600_bytecode_alu));
-			alu.op = ALU_OP3_MULADD;
+ 			alu.op = ALU_OP3_MULADD_IEEE;
 			alu.is_op3 = 1;
 			alu.src[0].sel = gradientsV;
 			alu.src[0].chan = i;
@@ -5232,7 +5232,7 @@ static int tgsi_tex(struct r600_shader_ctx *ctx)
 
 		for (i = 0; i < 3; i++) {
 			memset(&alu, 0, sizeof(struct r600_bytecode_alu));
-			alu.op = ALU_OP2_MUL;
+ 			alu.op = ALU_OP2_MUL_IEEE;
 			alu.src[0].sel = ctx->temp_reg;
 			alu.src[0].chan = out_chan;
 			r600_bytecode_src(&alu.src[1], &ctx->src[0], i);
@@ -5323,7 +5323,7 @@ static int tgsi_tex(struct r600_shader_ctx *ctx)
 		 * muladd has no writemask, have to use another temp
 		 */
 		memset(&alu, 0, sizeof(struct r600_bytecode_alu));
-		alu.op = ALU_OP3_MULADD;
+ 		alu.op = ALU_OP3_MULADD_IEEE;
 		alu.is_op3 = 1;
 
 		alu.src[0].sel = ctx->temp_reg;
@@ -5344,7 +5344,7 @@ static int tgsi_tex(struct r600_shader_ctx *ctx)
 			return r;
 
 		memset(&alu, 0, sizeof(struct r600_bytecode_alu));
-		alu.op = ALU_OP3_MULADD;
+ 		alu.op = ALU_OP3_MULADD_IEEE;
 		alu.is_op3 = 1;
 
 		alu.src[0].sel = ctx->temp_reg;
@@ -5403,7 +5403,7 @@ static int tgsi_tex(struct r600_shader_ctx *ctx)
 
 				/* have to multiply original layer by 8 and add to face id (temp.w) in Z */
 				memset(&alu, 0, sizeof(struct r600_bytecode_alu));
-				alu.op = ALU_OP3_MULADD;
+ 				alu.op = ALU_OP3_MULADD_IEEE;
 				alu.is_op3 = 1;
 				r600_bytecode_src(&alu.src[0], &ctx->src[0], 3);
 				alu.src[1].sel = V_SQ_ALU_SRC_LITERAL;
@@ -6066,7 +6066,7 @@ static int tgsi_lrp(struct r600_shader_ctx *ctx)
 			continue;
 
 		memset(&alu, 0, sizeof(struct r600_bytecode_alu));
-		alu.op = ALU_OP2_MUL;
+ 		alu.op = ALU_OP2_MUL_IEEE;
 		alu.src[0].sel = ctx->temp_reg;
 		alu.src[0].chan = i;
 		r600_bytecode_src(&alu.src[1], &ctx->src[2], i);
@@ -6091,7 +6091,7 @@ static int tgsi_lrp(struct r600_shader_ctx *ctx)
 			continue;
 
 		memset(&alu, 0, sizeof(struct r600_bytecode_alu));
-		alu.op = ALU_OP3_MULADD;
+ 		alu.op = ALU_OP3_MULADD_IEEE;
 		alu.is_op3 = 1;
 		r = tgsi_make_src_for_op3(ctx, extra_temp, 0, &alu.src[0], &ctx->src[0], i);
 		if (r)
@@ -6192,7 +6192,7 @@ static int tgsi_xpd(struct r600_shader_ctx *ctx)
 
 	for (i = 0; i < 4; i++) {
 		memset(&alu, 0, sizeof(struct r600_bytecode_alu));
-		alu.op = ALU_OP2_MUL;
+ 		alu.op = ALU_OP2_MUL_IEEE;
 		if (i < 3) {
 			r600_bytecode_src(&alu.src[0], &ctx->src[0], src0_swizzle[i]);
 			r600_bytecode_src(&alu.src[1], &ctx->src[1], src1_swizzle[i]);
@@ -6216,7 +6216,7 @@ static int tgsi_xpd(struct r600_shader_ctx *ctx)
 
 	for (i = 0; i < 4; i++) {
 		memset(&alu, 0, sizeof(struct r600_bytecode_alu));
-		alu.op = ALU_OP3_MULADD;
+ 		alu.op = ALU_OP3_MULADD_IEEE;
 
 		if (i < 3) {
 			r600_bytecode_src(&alu.src[0], &ctx->src[0], src1_swizzle[i]);
@@ -6561,7 +6561,7 @@ static int tgsi_log(struct r600_shader_ctx *ctx)
 
 		memset(&alu, 0, sizeof(struct r600_bytecode_alu));
 
-		alu.op = ALU_OP2_MUL;
+ 		alu.op = ALU_OP2_MUL_IEEE;
 
 		r600_bytecode_src(&alu.src[0], &ctx->src[0], 0);
 		r600_bytecode_src_set_abs(&alu.src[0]);
@@ -6771,7 +6771,7 @@ static int tgsi_opdst(struct r600_shader_ctx *ctx)
 	for (i = 0; i < 4; i++) {
 		memset(&alu, 0, sizeof(struct r600_bytecode_alu));
 
-		alu.op = ALU_OP2_MUL;
+        alu.op = ALU_OP2_MUL_IEEE;
 		tgsi_dst(ctx, &inst->Dst[0], i, &alu.dst);
 
 		if (i == 0 || i == 3) {
@@ -7288,12 +7288,12 @@ static struct r600_shader_tgsi_instruction r600_shader_tgsi_instruction[] = {
 	 * For state trackers other than OpenGL, we'll want to use
 	 * _RECIP_IEEE instead.
 	 */
-	{TGSI_OPCODE_RCP,	0, ALU_OP1_RECIP_CLAMPED, tgsi_trans_srcx_replicate},
+ 	{TGSI_OPCODE_RCP,	0, ALU_OP1_RECIP_CLAMPED, tgsi_trans_srcx_replicate},
 
 	{TGSI_OPCODE_RSQ,	0, ALU_OP0_NOP, tgsi_rsq},
 	{TGSI_OPCODE_EXP,	0, ALU_OP0_NOP, tgsi_exp},
 	{TGSI_OPCODE_LOG,	0, ALU_OP0_NOP, tgsi_log},
-	{TGSI_OPCODE_MUL,	0, ALU_OP2_MUL, tgsi_op2},
+ 	{TGSI_OPCODE_MUL,	0, ALU_OP2_MUL, tgsi_op2},
 	{TGSI_OPCODE_ADD,	0, ALU_OP2_ADD, tgsi_op2},
 	{TGSI_OPCODE_DP3,	0, ALU_OP2_DOT4, tgsi_dp},
 	{TGSI_OPCODE_DP4,	0, ALU_OP2_DOT4, tgsi_dp},
@@ -7302,7 +7302,7 @@ static struct r600_shader_tgsi_instruction r600_shader_tgsi_instruction[] = {
 	{TGSI_OPCODE_MAX,	0, ALU_OP2_MAX, tgsi_op2},
 	{TGSI_OPCODE_SLT,	0, ALU_OP2_SETGT, tgsi_op2_swap},
 	{TGSI_OPCODE_SGE,	0, ALU_OP2_SETGE, tgsi_op2},
-	{TGSI_OPCODE_MAD,	1, ALU_OP3_MULADD, tgsi_op3},
+ 	{TGSI_OPCODE_MAD,	1, ALU_OP3_MULADD, tgsi_op3},
 	{TGSI_OPCODE_SUB,	0, ALU_OP2_ADD, tgsi_op2},
 	{TGSI_OPCODE_LRP,	0, ALU_OP0_NOP, tgsi_lrp},
 	{19,			0, ALU_OP0_NOP, tgsi_unsupported},
@@ -7492,16 +7492,16 @@ static struct r600_shader_tgsi_instruction eg_shader_tgsi_instruction[] = {
 	{TGSI_OPCODE_RSQ,	0, ALU_OP1_RECIPSQRT_IEEE, tgsi_rsq},
 	{TGSI_OPCODE_EXP,	0, ALU_OP0_NOP, tgsi_exp},
 	{TGSI_OPCODE_LOG,	0, ALU_OP0_NOP, tgsi_log},
-	{TGSI_OPCODE_MUL,	0, ALU_OP2_MUL, tgsi_op2},
-	{TGSI_OPCODE_ADD,	0, ALU_OP2_ADD, tgsi_op2},
-	{TGSI_OPCODE_DP3,	0, ALU_OP2_DOT4, tgsi_dp},
-	{TGSI_OPCODE_DP4,	0, ALU_OP2_DOT4, tgsi_dp},
+ 	{TGSI_OPCODE_MUL,	0, ALU_OP2_MUL_IEEE, tgsi_op2},
+ 	{TGSI_OPCODE_ADD,	0, ALU_OP2_ADD, tgsi_op2},
+ 	{TGSI_OPCODE_DP3,	0, ALU_OP2_DOT4, tgsi_dp},
+ 	{TGSI_OPCODE_DP4,	0, ALU_OP2_DOT4, tgsi_dp},
 	{TGSI_OPCODE_DST,	0, ALU_OP0_NOP, tgsi_opdst},
 	{TGSI_OPCODE_MIN,	0, ALU_OP2_MIN, tgsi_op2},
 	{TGSI_OPCODE_MAX,	0, ALU_OP2_MAX, tgsi_op2},
 	{TGSI_OPCODE_SLT,	0, ALU_OP2_SETGT, tgsi_op2_swap},
 	{TGSI_OPCODE_SGE,	0, ALU_OP2_SETGE, tgsi_op2},
-	{TGSI_OPCODE_MAD,	1, ALU_OP3_MULADD, tgsi_op3},
+ 	{TGSI_OPCODE_MAD,	1, ALU_OP3_MULADD_IEEE, tgsi_op3},
 	{TGSI_OPCODE_SUB,	0, ALU_OP2_ADD, tgsi_op2},
 	{TGSI_OPCODE_LRP,	0, ALU_OP0_NOP, tgsi_lrp},
 	{19,			0, ALU_OP0_NOP, tgsi_unsupported},
@@ -7520,7 +7520,7 @@ static struct r600_shader_tgsi_instruction eg_shader_tgsi_instruction[] = {
 	{32,			0, ALU_OP0_NOP, tgsi_unsupported},
 	{TGSI_OPCODE_ABS,	0, ALU_OP1_MOV, tgsi_op2},
 	{34,			0, ALU_OP0_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_DPH,	0, ALU_OP2_DOT4, tgsi_dp},
+ 	{TGSI_OPCODE_DPH,	0, ALU_OP2_DOT4, tgsi_dp},
 	{TGSI_OPCODE_COS,	0, ALU_OP1_COS, tgsi_trig},
 	{TGSI_OPCODE_DDX,	0, FETCH_OP_GET_GRADIENTS_H, tgsi_tex},
 	{TGSI_OPCODE_DDY,	0, FETCH_OP_GET_GRADIENTS_V, tgsi_tex},

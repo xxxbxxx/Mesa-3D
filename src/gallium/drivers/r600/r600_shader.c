@@ -2364,6 +2364,16 @@ static int r600_shader_from_tgsi(struct r600_context *rctx,
 					output[j].swizzle_y = 4; /* 0 */
 					output[j].swizzle_z = 4; /* 0 */
 					output[j].swizzle_w = 4; /* 0 */
+
+				default:
+					if (!(shader->output[i].write_mask & 1))
+						output[j].swizzle_x = 4; /* 0 */
+					if (!(shader->output[i].write_mask & 2))
+						output[j].swizzle_y = 4; /* 0 */
+					if (!(shader->output[i].write_mask & 4))
+						output[j].swizzle_z = 4; /* 0 */
+					if (!(shader->output[i].write_mask & 8))
+						output[j].swizzle_w = 4; /* 0 */
 					break;
 				}
 

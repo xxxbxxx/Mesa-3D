@@ -2071,6 +2071,24 @@ DECL_SPECIAL(LOG)
     return D3D_OK;
 }
 
+DECL_SPECIAL(LRP)
+{
+    // microsoft d3d9 doc says:  dest.x = src0.x * (src1.x - src2.x) + src2.x;
+    // tgsi doc says: dst.x = src0.x * src1.x + (1 - src0.x) * src2.x
+    // let's try to expand the op!
+    struct ureg_program *ureg = tx->ureg;
+    struct ureg_dst tmp = tx_scratch(tx);
+    struct ureg_dst dst = tx_dst_param(tx, &tx->insn.dst[0]);
+    struct ureg_src src[3] = {
+        tx_src_param(tx, &tx->insn.src[0]),
+        tx_src_param(tx, &tx->insn.src[1]),
+        tx_src_param(tx, &tx->insn.src[2])
+    };
+    ureg_SUB(ureg, tmp, src[1], src[2]);
+    ureg_MAD(ureg, dst, src[0], ureg_src(tmp), src[2]);
+    return D3D_OK;}
+
+
 DECL_SPECIAL(NRM)
 {
     struct ureg_program *ureg = tx->ureg;
@@ -2677,7 +2695,7 @@ struct sm1_op_info inst_table[] =
     _OPI(LOG, LG2, V(0,0), V(3,0), V(0,0), V(3,0), 1, 1, SPECIAL(LOG)), /* 15 */
     _OPI(LIT, LIT, V(0,0), V(3,0), V(0,0), V(0,0), 1, 1, NULL), /* 16 */
     _OPI(DST, DST, V(0,0), V(3,0), V(0,0), V(3,0), 1, 2, NULL), /* 17 */
-    _OPI(LRP, LRP, V(0,0), V(3,0), V(0,0), V(3,0), 1, 3, NULL), /* 18 */
+    _OPI(LRP, LRP, V(0,0), V(3,0), V(0,0), V(3,0), 1, 3, SPECIAL(LRP)), /* 18 */
     _OPI(FRC, FRC, V(0,0), V(3,0), V(0,0), V(3,0), 1, 1, NULL), /* 19 */
 
     _OPI(M4x4, NOP, V(0,0), V(3,0), V(0,0), V(3,0), 1, 2, SPECIAL(M4x4)),

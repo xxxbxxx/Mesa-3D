@@ -190,6 +190,7 @@ bool dump::visit(fetch_node& n, bool enter) {
 		indent();
 		dump_flags(n);
 		dump_op(n, n.bc.op_ptr->name);
+		sblog << " / rid=" << n.bc.resource_id << ", sid=" << n.bc.sampler_id;
 		sblog << "\n";
 
 		++level;
@@ -431,7 +432,7 @@ void dump::dump_alu(alu_node *n) {
 		bc_alu_src &src = n->bc.src[s];
 
 		if (src.neg)
-			sblog << "-";
+			sblog << "~";
 
 		if (src.abs)
 			sblog << "|";

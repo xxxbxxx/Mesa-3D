@@ -1812,9 +1812,6 @@ static int r600_shader_from_tgsi(struct r600_context *rctx,
 	bool ring_outputs = false;
 	bool pos_emitted = false;
 
-#ifdef R600_USE_LLVM
-	use_llvm = rscreen->b.debug_flags & DBG_LLVM;
-#endif
 	ctx.bc = &shader->bc;
 	ctx.shader = shader;
 	ctx.native_integers = true;
@@ -1832,6 +1829,11 @@ static int r600_shader_from_tgsi(struct r600_context *rctx,
 	ctx.type = ctx.parse.FullHeader.Processor.Processor;
 	shader->processor_type = ctx.type;
 	ctx.bc->type = shader->processor_type;
+
+#ifdef R600_USE_LLVM
+    use_llvm = (rscreen->b.debug_flags & DBG_LLVM) && ctx.type == TGSI_PROCESSOR_VERTEX;
+    fprintf(stderr, "using llvm=%d - procressor=%d\n", use_llvm, ctx.type);
+#endif
 
 	ring_outputs = key.vs_as_es || (ctx.type == TGSI_PROCESSOR_GEOMETRY);
 

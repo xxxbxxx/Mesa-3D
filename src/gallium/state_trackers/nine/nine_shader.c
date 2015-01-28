@@ -1929,7 +1929,7 @@ static void ps3_concat_inputs(struct shader_translator *tx,
         swizzle[0] = swizzle[1];
         swizzle[1] = swizzle[2];
         swizzle[2] = swizzle[3];
-        mask = mask > 1;
+        mask = mask >> 1;
     }
     ureg_MOV(tx->ureg, tmp, previous_reg);
     ureg_MOV(tx->ureg, ureg_writemask(tmp, sem->reg.mask),

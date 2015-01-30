@@ -68,6 +68,7 @@ struct nine_shader_info
     unsigned num_bool_consts_slots;
 
     struct nine_lconstf lconstf; /* out, NOTE: members to be free'd by user */
+    uint8_t bumpenvmat_needed;
 };
 
 static INLINE void

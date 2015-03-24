@@ -46,6 +46,13 @@ prepare_dsa(struct NineDevice9 *device)
     device->state.commit |= NINE_STATE_COMMIT_DSA;
 }
 
+static INLINE void
+prepare_rasterizer(struct NineDevice9 *device)
+{
+    nine_convert_rasterizer_state(&device->state.pipe.rast, device->state.rs);
+    device->state.commit |= NINE_STATE_COMMIT_RASTERIZER;
+}
+
 /* State preparation incremental */
 
 HRESULT nine_state_set(struct NineDevice9 *This,
@@ -96,6 +103,60 @@ HRESULT nine_state_set(struct NineDevice9 *This,
         state->pipe.dsa.alpha.func = rs[D3DRS_ALPHATESTENABLE] ? d3dcmpfunc_to_pipe_func(Value) : 0;
         state->commit |= NINE_STATE_COMMIT_DSA;
         break;
+    case D3DRS_FILLMODE:
+        state->pipe.rast.fill_front = d3dfillmode_to_pipe_polygon_mode(Value);
+        state->pipe.rast.fill_back = state->pipe.rast.fill_front;
+        state->commit |= NINE_STATE_COMMIT_RASTERIZER;
+        break;
+    case D3DRS_SHADEMODE:
+        state->pipe.rast.flatshade = Value == D3DSHADE_FLAT;
+        state->commit |= NINE_STATE_COMMIT_RASTERIZER;
+        break;
+    case D3DRS_LASTPIXEL:
+        state->pipe.rast.line_last_pixel = !!Value;
+        state->commit |= NINE_STATE_COMMIT_RASTERIZER;
+        break;
+    case D3DRS_CULLMODE:
+        state->pipe.rast.cull_face = d3dcull_to_pipe_face(Value);
+        state->commit |= NINE_STATE_COMMIT_RASTERIZER;
+        break;
+    case D3DRS_CLIPPLANEENABLE:
+        state->pipe.rast.clip_plane_enable = Value;
+        state->commit |= NINE_STATE_COMMIT_RASTERIZER;
+        break;
+    case D3DRS_POINTSIZE:
+        state->pipe.rast.point_size = rs[NINED3DRS_VSPOINTSIZE] ?
+            1.0f : asfloat(Value);
+        state->commit |= NINE_STATE_COMMIT_RASTERIZER;
+        break;
+    case D3DRS_POINTSPRITEENABLE:
+        state->pipe.rast.point_quad_rasterization = !!Value;
+        state->commit |= NINE_STATE_COMMIT_RASTERIZER;
+        break;
+    case D3DRS_MULTISAMPLEANTIALIAS:
+        state->pipe.rast.multisample = !!Value;
+        state->commit |= NINE_STATE_COMMIT_RASTERIZER;
+        break;
+    case D3DRS_SCISSORTESTENABLE:
+        state->pipe.rast.scissor = !!Value;
+        state->commit |= NINE_STATE_COMMIT_RASTERIZER;
+        break;
+    case D3DRS_SLOPESCALEDEPTHBIAS:
+        state->pipe.rast.offset_tri = !!(rs[D3DRS_DEPTHBIAS] | Value);
+        state->pipe.rast.offset_line = state->pipe.rast.offset_tri;
+        state->pipe.rast.offset_scale = asfloat(Value);
+        state->commit |= NINE_STATE_COMMIT_RASTERIZER;
+        break;
+    case D3DRS_ANTIALIASEDLINEENABLE:
+        state->pipe.rast.line_smooth = !!Value;
+        state->commit |= NINE_STATE_COMMIT_RASTERIZER;
+        break;
+    case D3DRS_DEPTHBIAS:
+        state->pipe.rast.offset_tri = !!(Value | rs[D3DRS_SLOPESCALEDEPTHBIAS]);
+        state->pipe.rast.offset_line = state->pipe.rast.offset_tri;
+        state->pipe.rast.offset_units = asfloat(Value) * asfloat(rs[NINED3DRS_ZBIASSCALE]);
+        state->commit |= NINE_STATE_COMMIT_RASTERIZER;
+        break;
     default:
         state->changed.group |= nine_render_state_group[State];
         break;
@@ -106,7 +167,7 @@ HRESULT nine_state_set(struct NineDevice9 *This,
 
 /* State preparation + State commit */
 
-static uint32_t
+static void
 update_framebuffer(struct NineDevice9 *device)
 {
     struct pipe_context *pipe = device->pipe;
@@ -193,11 +254,11 @@ update_framebuffer(struct NineDevice9 *device)
         }
         if (state->rs[NINED3DRS_ZBIASSCALE] != scale) {
             state->rs[NINED3DRS_ZBIASSCALE] = scale;
-            state->changed.group |= NINE_STATE_RASTERIZER;
+            state->pipe.rast.offset_units =
+                asfloat(state->rs[D3DRS_DEPTHBIAS]) * asfloat(scale);
+            state->commit |= NINE_STATE_COMMIT_RASTERIZER;
         }
     }
-
-    return state->changed.group;
 }
 
 static void
@@ -251,11 +312,6 @@ update_blend(struct NineDevice9 *device)
     nine_convert_blend_state(device->cso, device->state.rs);
 }
 
-static INLINE void
-update_rasterizer(struct NineDevice9 *device)
-{
-    nine_convert_rasterizer_state(device->cso, device->state.rs);
-}
 
 /* Loop through VS inputs and pick the vertex elements with the declared
  * usage from the vertex declaration, then insert the instance divisor from
@@ -405,7 +461,9 @@ update_vs(struct NineDevice9 *device)
 
     if (state->rs[NINED3DRS_VSPOINTSIZE] != vs->point_size) {
         state->rs[NINED3DRS_VSPOINTSIZE] = vs->point_size;
-        changed_group |= NINE_STATE_RASTERIZER;
+        state->pipe.rast.point_size_per_vertex = vs->point_size;
+        state->pipe.rast.point_size = vs->point_size ? 1.0f : asfloat(state->rs[D3DRS_POINTSIZE]);
+        state->commit |= NINE_STATE_COMMIT_RASTERIZER;
     }
 
     if ((state->bound_samplers_mask_vs & vs->sampler_mask) != vs->sampler_mask)
@@ -933,6 +991,12 @@ commit_scissor(struct NineDevice9 *device)
 }
 
 static INLINE void
+commit_rasterizer(struct NineDevice9 *device)
+{
+    cso_set_rasterizer(device->cso, &device->state.pipe.rast);
+}
+
+static INLINE void
 commit_index_buffer(struct NineDevice9 *device)
 {
     struct pipe_context *pipe = device->pipe;
@@ -1017,7 +1081,7 @@ nine_update_state(struct NineDevice9 *device)
 
     if (group & NINE_STATE_FREQ_GROUP_0) {
         if (group & NINE_STATE_FB)
-            group = update_framebuffer(device);
+            update_framebuffer(device);
         if (group & NINE_STATE_VIEWPORT)
             update_viewport(device);
         if (group & NINE_STATE_SCISSOR)
@@ -1032,7 +1096,7 @@ nine_update_state(struct NineDevice9 *device)
             group |= update_vs(device);
 
         if (group & NINE_STATE_RASTERIZER)
-            update_rasterizer(device);
+            prepare_rasterizer(device);
 
         if (group & NINE_STATE_PS)
             group |= update_ps(device);
@@ -1086,6 +1150,8 @@ nine_update_state(struct NineDevice9 *device)
 
     if (state->commit & NINE_STATE_COMMIT_DSA)
         commit_dsa(device);
+    if (state->commit & NINE_STATE_COMMIT_RASTERIZER)
+        commit_rasterizer(device);
 
     state->commit = 0;
 

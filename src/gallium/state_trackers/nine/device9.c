@@ -125,6 +125,8 @@ NineDevice9_ctor( struct NineDevice9 *This,
         This, pParams, pScreen, pCreationParameters, pCaps, pPresentationParameters, pD3D9,
         pPresentationGroup, pCTX, (int) ex, pFullscreenDisplayMode);
 
+    WARN("offsetof(nine_force_large_constants_upload) = %d\n", (int)offsetof(struct NineDevice9, nine_force_large_constants_upload));
+
     if (FAILED(hr)) { return hr; }
 
     list_inithead(&This->update_textures);

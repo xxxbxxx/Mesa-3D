@@ -49,6 +49,8 @@ struct NineDevice9
     struct NineUnknown base;
     boolean ex;
 
+    int nine_force_large_constants_upload;
+
     /* G3D context */
     struct pipe_screen *screen;
     struct pipe_context *pipe;

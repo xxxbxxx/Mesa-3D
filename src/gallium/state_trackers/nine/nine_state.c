@@ -61,6 +61,7 @@ prepare_rasterizer(struct NineDevice9 *device)
     device->state.commit |= NINE_STATE_COMMIT_RASTERIZER;
 }
 
+
 #define DO_UPLOAD_CONST_F(buf,p,c,d) \
     do { \
         DBG("upload ConstantF [%u .. %u]\n", x, (x) + (c) - 1); \
@@ -74,6 +75,9 @@ prepare_rasterizer(struct NineDevice9 *device)
 static void
 upload_constants(struct NineDevice9 *device, unsigned shader_type)
 {
+    assert(false);
+
+#if 0
     struct pipe_context *pipe = device->pipe;
     struct pipe_resource *buf;
     struct pipe_box box;
@@ -200,49 +204,77 @@ upload_constants(struct NineDevice9 *device, unsigned shader_type)
             r = r->next;
         }
     }
+#endif
 }
+
+
+unsigned ps_consts_upload_count = 0;
+unsigned vs_consts_upload_count = 0;
+unsigned vs_consts_upload_fulls = 0;
+size_t vs_consts_upload_size = 0;
+size_t ps_consts_upload_size = 0;
 
 static void
 prepare_vs_constants_userbuf(struct NineDevice9 *device)
 {
     struct nine_state *state = &device->state;
+    const size_t slotsize = sizeof(float[4]);
+    const unsigned num_slots = state->vs->const_buffer_num_slots;
+    const bool use_remapping = state->vs->const_slot_remaps[0].type != NINE_CONST_TYPENOREMAP;
     struct pipe_constant_buffer cb;
     cb.buffer = NULL;
     cb.buffer_offset = 0;
-    cb.buffer_size = device->state.vs->const_used_size;
-    cb.user_buffer = device->state.vs_const_f;
+    cb.buffer_size = device->nine_force_large_constants_upload ? device->vs_const_size : num_slots * slotsize;
+    cb.user_buffer = state->vs_user_buffer_temp;
 
     if (!cb.buffer_size)
         return;
 
-    if (state->changed.vs_const_i) {
-        int *idst = (int *)&state->vs_const_f[4 * device->max_vs_const_f];
-        memcpy(idst, state->vs_const_i, sizeof(state->vs_const_i));
-        state->changed.vs_const_i = 0;
-    }
-    if (state->changed.vs_const_b) {
-        int *idst = (int *)&state->vs_const_f[4 * device->max_vs_const_f];
-        uint32_t *bdst = (uint32_t *)&idst[4 * NINE_MAX_CONST_I];
-        memcpy(bdst, state->vs_const_b, sizeof(state->vs_const_b));
-        state->changed.vs_const_b = 0;
-    }
+    vs_consts_upload_size += cb.buffer_size;
+    vs_consts_upload_count ++;
+    if (cb.buffer_size >= device->max_vs_const_f * slotsize)
+        vs_consts_upload_fulls ++;
 
-    if (device->state.vs->lconstf.ranges) {
-        /* TODO: Can we make it so that we don't have to copy everything ? */
-        const struct nine_lconstf *lconstf =  &device->state.vs->lconstf;
-        const struct nine_range *r = lconstf->ranges;
-        unsigned n = 0;
-        float *dst = device->state.vs_lconstf_temp;
-        float *src = (float *)cb.user_buffer;
-        memcpy(dst, src, cb.buffer_size);
-        while (r) {
-            unsigned p = r->bgn;
-            unsigned c = r->end - r->bgn;
-            memcpy(&dst[p * 4], &lconstf->data[n * 4], c * 4 * sizeof(float));
-            n += c;
-            r = r->next;
+    if (state->vs->indirect_const_access) {
+        assert(!use_remapping);
+        memcpy((char*)cb.user_buffer + 0, &state->vs_const_f[0], device->max_vs_const_f * slotsize);
+        if (num_slots > device->max_vs_const_f)
+            memcpy((char*)cb.user_buffer + device->max_vs_const_f * slotsize, &state->vs_const_b[0], NINE_MAX_CONST_B * slotsize);
+        if (num_slots > device->max_vs_const_f + NINE_MAX_CONST_B)
+            memcpy((char*)cb.user_buffer + (device->max_vs_const_f+NINE_MAX_CONST_B) * slotsize, &state->vs_const_i[0], NINE_MAX_CONST_I * slotsize);
+        if (state->vs->lconstf.ranges) {
+            const struct nine_lconstf *lconstf =  &state->vs->lconstf;
+            const struct nine_range *r = lconstf->ranges;
+            unsigned n = 0;
+            float *dst = (float*)cb.user_buffer;
+            while (r) {
+                unsigned p = r->bgn;
+                unsigned c = r->end - r->bgn;
+                memcpy(&dst[p * 4], &lconstf->data[n * 4], c * sizeof(float[4]));
+                n += c;
+                r = r->next;
+            }
         }
-        cb.user_buffer = dst;
+    } else if (use_remapping) {
+        assert(!state->vs->lconstf.ranges);
+        char* ptr = (char*)cb.user_buffer;
+        for (unsigned i=0; i<num_slots; i++)
+        {
+            struct nine_const_remap remap = state->vs->const_slot_remaps[i];
+            switch (remap.type) {
+            case NINE_CONST_TYPE_FLOAT: memcpy(ptr, &state->vs_const_f[remap.idx*4], slotsize); break;
+            case NINE_CONST_TYPE_INT:   memcpy(ptr, &state->vs_const_i[remap.idx*4], slotsize); break;
+            case NINE_CONST_TYPE_BOOL:  memcpy(ptr, &state->vs_const_b[remap.idx*4], slotsize); break;
+            }
+            ptr += slotsize;
+        }
+    } else {
+        assert(!state->vs->lconstf.ranges);
+        memcpy((char*)cb.user_buffer + 0, &state->vs_const_f[0], device->max_vs_const_f * slotsize);
+        if (num_slots > device->max_vs_const_f)
+            memcpy((char*)cb.user_buffer + device->max_vs_const_f * slotsize, &state->vs_const_b[0], NINE_MAX_CONST_B * slotsize);
+        if (num_slots > device->max_vs_const_f + NINE_MAX_CONST_B)
+            memcpy((char*)cb.user_buffer + (device->max_vs_const_f+NINE_MAX_CONST_B) * slotsize, &state->vs_const_i[0], NINE_MAX_CONST_I * slotsize);
     }
 
     if (!device->driver_caps.user_cbufs) {
@@ -258,68 +290,89 @@ prepare_vs_constants_userbuf(struct NineDevice9 *device)
 
     state->pipe.cb_vs = cb;
 
-    if (device->state.changed.vs_const_f) {
-        struct nine_range *r = device->state.changed.vs_const_f;
+    // always undirty (dirty flags are ignored anyway)
+    state->changed.vs_const_i = 0;
+    state->changed.vs_const_b = 0;
+    if (state->changed.vs_const_f) {
+        struct nine_range *r = state->changed.vs_const_f;
         struct nine_range *p = r;
         while (p->next)
             p = p->next;
         nine_range_pool_put_chain(&device->range_pool, r, p);
-        device->state.changed.vs_const_f = NULL;
+        state->changed.vs_const_f = NULL;
     }
+
+
     state->changed.group &= ~NINE_STATE_VS_CONST;
     state->commit |= NINE_STATE_COMMIT_CONST_VS;
 }
+
 
 static void
 prepare_ps_constants_userbuf(struct NineDevice9 *device)
 {
     struct nine_state *state = &device->state;
     struct pipe_constant_buffer cb;
+    const size_t slotsize = sizeof(float[4]);
+    const bool use_remapping = state->ps->const_slot_remaps[0].type != NINE_CONST_TYPENOREMAP;
+    const unsigned num_slots = state->ps->const_buffer_num_slots;
     int i;
     cb.buffer = NULL;
     cb.buffer_offset = 0;
-    cb.buffer_size = device->state.ps->const_used_size;
-    cb.user_buffer = device->state.ps_const_f;
+    cb.buffer_size = device->nine_force_large_constants_upload ? device->ps_const_size : num_slots * slotsize;
+    cb.user_buffer = state->ps_user_buffer_temp;
 
     if (!cb.buffer_size)
         return;
 
-    if (state->changed.ps_const_i) {
-        int *idst = (int *)&state->ps_const_f[4 * device->max_ps_const_f];
-        memcpy(idst, state->ps_const_i, sizeof(state->ps_const_i));
-        state->changed.ps_const_i = 0;
-    }
-    if (state->changed.ps_const_b) {
-        int *idst = (int *)&state->ps_const_f[4 * device->max_ps_const_f];
-        uint32_t *bdst = (uint32_t *)&idst[4 * NINE_MAX_CONST_I];
-        memcpy(bdst, state->ps_const_b, sizeof(state->ps_const_b));
-        state->changed.ps_const_b = 0;
-    }
+    ps_consts_upload_size += cb.buffer_size;
+    ps_consts_upload_count ++;
 
     /* Upload special constants needed to implement PS1.x instructions like TEXBEM,TEXBEML and BEM */
-    if (device->state.ps->byte_code.version >> 4 == 1 && device->state.ps->bumpenvmat_needed) { /* Version.major = 1 */
-
-        memcpy(device->state.ps_bumpenvmap_temp, cb.user_buffer, cb.buffer_size);
+    if (state->ps->bumpenvmat_needed) { /* Version.major = 1 */
+        assert(state->ps->byte_code.version >> 4 == 1);
+        assert(!use_remapping);
+        float* ps_bumpenvmap_temp = (float*)cb.user_buffer;
 
         /* Set the bump env matrix */
         for (i = 0; i < 8; i++) {
             /* 4floats*maxps1xconst+4floats*texstage+matpart */
             /* The matrix as comments on wine visual.c test say, is transposed */
-            device->state.ps_bumpenvmap_temp[4 * 8 + 4 * i + 0] = *((float *)&device->state.ff.tex_stage[i][D3DTSS_BUMPENVMAT00]);
-            device->state.ps_bumpenvmap_temp[4 * 8 + 4 * i + 1] = *((float *)&device->state.ff.tex_stage[i][D3DTSS_BUMPENVMAT10]);
-            device->state.ps_bumpenvmap_temp[4 * 8 + 4 * i + 2] = *((float *)&device->state.ff.tex_stage[i][D3DTSS_BUMPENVMAT01]);
-            device->state.ps_bumpenvmap_temp[4 * 8 + 4 * i + 3] = *((float *)&device->state.ff.tex_stage[i][D3DTSS_BUMPENVMAT11]);
+            ps_bumpenvmap_temp[4 * 8 + 4 * i + 0] = *((float *)&state->ff.tex_stage[i][D3DTSS_BUMPENVMAT00]);
+            ps_bumpenvmap_temp[4 * 8 + 4 * i + 1] = *((float *)&state->ff.tex_stage[i][D3DTSS_BUMPENVMAT10]);
+            ps_bumpenvmap_temp[4 * 8 + 4 * i + 2] = *((float *)&state->ff.tex_stage[i][D3DTSS_BUMPENVMAT01]);
+            ps_bumpenvmap_temp[4 * 8 + 4 * i + 3] = *((float *)&state->ff.tex_stage[i][D3DTSS_BUMPENVMAT11]);
         }
 
         /* Set the bumpenvl parameters */
         for (i = 0; i < 4; i++) {
-            device->state.ps_bumpenvmap_temp[4 * 8 + 4 * 8 + i * 4 + 0] = *((float *)&device->state.ff.tex_stage[i * 2 + 0][D3DTSS_BUMPENVLSCALE]);
-            device->state.ps_bumpenvmap_temp[4 * 8 + 4 * 8 + i * 4 + 1] = *((float *)&device->state.ff.tex_stage[i * 2 + 0][D3DTSS_BUMPENVLOFFSET]);
-            device->state.ps_bumpenvmap_temp[4 * 8 + 4 * 8 + i * 4 + 2] = *((float *)&device->state.ff.tex_stage[i * 2 + 1][D3DTSS_BUMPENVLSCALE]);
-            device->state.ps_bumpenvmap_temp[4 * 8 + 4 * 8 + i * 4 + 3] = *((float *)&device->state.ff.tex_stage[i * 2 + 1][D3DTSS_BUMPENVLOFFSET]);
+            ps_bumpenvmap_temp[4 * 8 + 4 * 8 + i * 4 + 0] = *((float *)&state->ff.tex_stage[i * 2 + 0][D3DTSS_BUMPENVLSCALE]);
+            ps_bumpenvmap_temp[4 * 8 + 4 * 8 + i * 4 + 1] = *((float *)&state->ff.tex_stage[i * 2 + 0][D3DTSS_BUMPENVLOFFSET]);
+            ps_bumpenvmap_temp[4 * 8 + 4 * 8 + i * 4 + 2] = *((float *)&state->ff.tex_stage[i * 2 + 1][D3DTSS_BUMPENVLSCALE]);
+            ps_bumpenvmap_temp[4 * 8 + 4 * 8 + i * 4 + 3] = *((float *)&state->ff.tex_stage[i * 2 + 1][D3DTSS_BUMPENVLOFFSET]);
         }
-
-        cb.user_buffer = device->state.ps_bumpenvmap_temp;
+    }
+    else if (use_remapping)
+    {
+        char* ptr = (char*)cb.user_buffer;
+        for (unsigned i=0; i<num_slots; i++)
+        {
+            struct nine_const_remap remap = state->ps->const_slot_remaps[i];
+            switch (remap.type) {
+            case NINE_CONST_TYPE_FLOAT: memcpy(ptr, &state->ps_const_f[remap.idx*4], slotsize); break;
+            case NINE_CONST_TYPE_INT:   memcpy(ptr, &state->ps_const_i[remap.idx*4], slotsize); break;
+            case NINE_CONST_TYPE_BOOL:  memcpy(ptr, &state->ps_const_b[remap.idx*4], slotsize); break;
+            }
+            ptr += slotsize;
+        }
+    }
+    else
+    {
+        memcpy((char*)cb.user_buffer + 0, &state->ps_const_f[0], device->max_ps_const_f * slotsize);
+        if (num_slots > device->max_ps_const_f)
+            memcpy((char*)cb.user_buffer + device->max_ps_const_f * slotsize, &state->ps_const_b[0], NINE_MAX_CONST_B * slotsize);
+        if (num_slots > device->max_ps_const_f + NINE_MAX_CONST_B)
+            memcpy((char*)cb.user_buffer + (device->max_ps_const_f+NINE_MAX_CONST_B) * slotsize, &state->ps_const_i[0], NINE_MAX_CONST_I * slotsize);
     }
 
     if (!device->driver_caps.user_cbufs) {
@@ -335,14 +388,19 @@ prepare_ps_constants_userbuf(struct NineDevice9 *device)
 
     state->pipe.cb_ps = cb;
 
-    if (device->state.changed.ps_const_f) {
-        struct nine_range *r = device->state.changed.ps_const_f;
+    // undirty (dirty flags are ignored anyway)
+    state->changed.ps_const_i = 0;
+    state->changed.ps_const_b = 0;
+    if (state->changed.ps_const_f) {
+        struct nine_range *r = state->changed.ps_const_f;
         struct nine_range *p = r;
         while (p->next)
             p = p->next;
         nine_range_pool_put_chain(&device->range_pool, r, p);
-        device->state.changed.ps_const_f = NULL;
+        state->changed.ps_const_f = NULL;
     }
+
+
     state->changed.group &= ~NINE_STATE_PS_CONST;
     state->commit |= NINE_STATE_COMMIT_CONST_PS;
 }
@@ -553,6 +611,7 @@ update_framebuffer(struct NineDevice9 *device)
             state->commit |= NINE_STATE_COMMIT_RASTERIZER;
         }
     }
+
 }
 
 static void
@@ -787,7 +846,6 @@ update_vertex_buffers(struct NineDevice9 *device)
     struct pipe_vertex_buffer dummy_vtxbuf;
     uint32_t mask = state->changed.vtxbuf;
     unsigned i;
-    unsigned start;
 
     DBG("mask=%x\n", mask);
 
@@ -1212,6 +1270,18 @@ nine_update_state(struct NineDevice9 *device)
     device->state.changed.group &=
         (NINE_STATE_FF | NINE_STATE_VS_CONST | NINE_STATE_PS_CONST);
 
+    if (vs_consts_upload_count > 50000 && ps_consts_upload_count > 1) {
+        int psavg = ps_consts_upload_size / ps_consts_upload_count;
+        int vsavg = vs_consts_upload_size / vs_consts_upload_count;
+        int vsfull = (100*vs_consts_upload_fulls)/ vs_consts_upload_count;
+        WARN("uploads: ps=%dbytes/update, vs=%dbytes/update (%d%% full)\n", psavg, vsavg, vsfull);
+        ps_consts_upload_size = 0;
+        ps_consts_upload_count = 0;
+        vs_consts_upload_size = 0;
+        vs_consts_upload_count = 0;
+        vs_consts_upload_fulls = 0;
+    }
+
     DBG("finished\n");
 
     return TRUE;
@@ -1372,7 +1442,6 @@ static const DWORD nine_samp_state_defaults[NINED3DSAMP_LAST + 1] =
     [NINED3DSAMP_MINLOD] = 0,
     [NINED3DSAMP_SHADOW] = 0
 };
-
 void nine_state_restore_non_cso(struct NineDevice9 *device)
 {
     struct nine_state *state = &device->state;
@@ -1383,7 +1452,6 @@ void nine_state_restore_non_cso(struct NineDevice9 *device)
     state->changed.texture = NINE_PS_SAMPLERS_MASK | NINE_VS_SAMPLERS_MASK;
     state->commit |= NINE_STATE_COMMIT_CONST_VS | NINE_STATE_COMMIT_CONST_PS;
 }
-
 void
 nine_state_set_defaults(struct NineDevice9 *device, const D3DCAPS9 *caps,
                         boolean is_reset)
@@ -1439,7 +1507,6 @@ nine_state_set_defaults(struct NineDevice9 *device, const D3DCAPS9 *caps,
         state->dummy_vbo_bound_at = -1;
         state->vbo_bound_done = FALSE;
     }
-
     if (!device->prefer_user_constbuf) {
         /* fill cb_vs and cb_ps for the non user constbuf path */
         struct pipe_constant_buffer cb;
@@ -1717,7 +1784,6 @@ const uint32_t nine_render_state_group[NINED3DRS_LAST + 1] =
 };
 
 /* Misc */
-
 D3DMATRIX *
 nine_state_access_transform(struct nine_state *state, D3DTRANSFORMSTATETYPE t,
                             boolean alloc)
@@ -1873,3 +1939,4 @@ const char *nine_d3drs_to_string(DWORD State)
         return "(invalid)";
     }
 }
+

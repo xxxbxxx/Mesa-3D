@@ -43,11 +43,6 @@ NineStateBlock9_ctor( struct NineStateBlock9 *This,
 
     This->type = type;
 
-    This->state.vs_const_f = MALLOC(This->base.device->vs_const_size);
-    This->state.ps_const_f = MALLOC(This->base.device->ps_const_size);
-    if (!This->state.vs_const_f || !This->state.ps_const_f)
-        return E_OUTOFMEMORY;
-
     return D3D_OK;
 }
 
@@ -59,9 +54,6 @@ NineStateBlock9_dtor( struct NineStateBlock9 *This )
     struct nine_range_pool *pool = &This->base.device->range_pool;
 
     nine_state_clear(state, FALSE);
-
-    FREE(state->vs_const_f);
-    FREE(state->ps_const_f);
 
     FREE(state->ff.light);
 
@@ -125,7 +117,7 @@ nine_state_copy_common(struct nine_state *dst,
             uint16_t m = mask->changed.vs_const_i;
             for (i = ffs(m) - 1, m >>= i; m; ++i, m >>= 1)
                 if (m & 1)
-                    memcpy(dst->vs_const_i[i], src->vs_const_i[i], 4 * sizeof(int));
+                    memcpy(&dst->vs_const_i[i*4], &src->vs_const_i[i*4], 4 * sizeof(int));
             if (apply)
                 dst->changed.vs_const_i |= mask->changed.vs_const_i;
         }
@@ -154,7 +146,7 @@ nine_state_copy_common(struct nine_state *dst,
             uint16_t m = mask->changed.ps_const_i;
             for (i = ffs(m) - 1, m >>= i; m; ++i, m >>= 1)
                 if (m & 1)
-                    memcpy(dst->ps_const_i[i], src->ps_const_i[i], 4 * sizeof(int));
+                    memcpy(&dst->ps_const_i[i*4], &src->ps_const_i[i*4], 4 * sizeof(int));
             if (apply)
                 dst->changed.ps_const_i |= mask->changed.ps_const_i;
         }

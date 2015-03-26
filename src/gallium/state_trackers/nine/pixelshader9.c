@@ -53,12 +53,10 @@ NinePixelShader9_ctor( struct NinePixelShader9 *This,
 
     info.type = PIPE_SHADER_FRAGMENT;
     info.byte_code = pFunction;
-    info.const_i_base = NINE_CONST_I_BASE(device->max_ps_const_f) / 16;
-    info.const_b_base = NINE_CONST_B_BASE(device->max_ps_const_f) / 16;
     info.sampler_mask_shadow = 0x0;
     info.sampler_ps1xtypes = 0x0;
 
-    hr = nine_translate_shader(device, &info);
+    hr = nine_translate_shader(device, &info, false);
     if (FAILED(hr))
         return hr;
     This->byte_code.version = info.version;
@@ -71,7 +69,11 @@ NinePixelShader9_ctor( struct NinePixelShader9 *This,
     This->variant.cso = info.cso;
     This->sampler_mask = info.sampler_mask;
     This->rt_mask = info.rt_mask;
-    This->const_used_size = info.const_used_size;
+    This->const_buffer_num_slots = info.const_buffer_num_slots;
+	if (info.num_remapped_slots > 0)
+		memcpy(This->const_slot_remaps, info.const_slot_remaps, info.num_remapped_slots * sizeof(struct nine_const_remap));
+	else
+		This->const_slot_remaps[0].type = NINE_CONST_TYPENOREMAP;
     This->bumpenvmat_needed = info.bumpenvmat_needed;
     /* no constant relative addressing for ps */
     assert(info.lconstf.data == NULL);
@@ -130,18 +132,15 @@ NinePixelShader9_GetVariant( struct NinePixelShader9 *This,
 {
     void *cso = nine_shader_variant_get(&This->variant, key);
     if (!cso) {
-        struct NineDevice9 *device = This->base.device;
         struct nine_shader_info info;
         HRESULT hr;
 
         info.type = PIPE_SHADER_FRAGMENT;
-        info.const_i_base = NINE_CONST_I_BASE(device->max_ps_const_f) / 16;
-        info.const_b_base = NINE_CONST_B_BASE(device->max_ps_const_f) / 16;
         info.byte_code = This->byte_code.tokens;
         info.sampler_mask_shadow = key & 0xffff;
         info.sampler_ps1xtypes = key;
 
-        hr = nine_translate_shader(This->base.device, &info);
+        hr = nine_translate_shader(This->base.device, &info, false);
         if (FAILED(hr))
             return NULL;
         nine_shader_variant_add(&This->variant, key, info.cso);

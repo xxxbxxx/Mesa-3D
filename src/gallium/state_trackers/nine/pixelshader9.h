@@ -39,7 +39,8 @@ struct NinePixelShader9
         uint8_t version; /* (major << 4) | minor */
     } byte_code;
 
-    unsigned const_used_size; /* in bytes */
+    unsigned const_buffer_num_slots;
+    struct nine_const_remap const_slot_remaps[NINE_MAX_CONST_ALL];
 
     uint8_t bumpenvmat_needed;
     uint16_t sampler_mask;

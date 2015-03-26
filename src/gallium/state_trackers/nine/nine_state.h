@@ -90,15 +90,8 @@
 #define NINE_MAX_CONST_F_PS3 224
 #define NINE_MAX_CONST_F   256
 #define NINE_MAX_CONST_I   16
-#define NINE_MAX_CONST_B   16
-#define NINE_MAX_CONST_ALL 276 /* B consts count only 1/4 th */
-
-#define NINE_CONST_I_BASE(nconstf) \
-    ((nconstf)        * 4 * sizeof(float))
-#define NINE_CONST_B_BASE(nconstf) \
-    ((nconstf)        * 4 * sizeof(float) + \
-     NINE_MAX_CONST_I * 4 * sizeof(int))
-
+#define NINE_MAX_CONST_B   4    /* exposed as 16 BOOL constants */
+#define NINE_MAX_CONST_ALL 276
 
 #define NINE_MAX_LIGHTS        65536
 #define NINE_MAX_LIGHTS_ACTIVE 8
@@ -127,7 +120,7 @@ struct nine_state
         struct nine_range *ps_const_f;
         uint16_t vs_const_i; /* NINE_MAX_CONST_I == 16 */
         uint16_t ps_const_i;
-        uint16_t vs_const_b; /* NINE_MAX_CONST_B == 16 */
+        uint16_t vs_const_b; /* NINE_MAX_CONST_B == 4 */
         uint16_t ps_const_b;
         uint8_t ucp;
         boolean srgb;
@@ -145,17 +138,17 @@ struct nine_state
      * NOTE: const_f contains extra space for const_i,b to use as user constbuf
      */
     struct NineVertexShader9 *vs;
-    float *vs_const_f;
-    int    vs_const_i[NINE_MAX_CONST_I][4];
-    BOOL   vs_const_b[NINE_MAX_CONST_B];
-    float *vs_lconstf_temp;
-    float *ps_bumpenvmap_temp;
+    float  vs_const_f[NINE_MAX_CONST_F*4];
+    int    vs_const_i[NINE_MAX_CONST_I*4];
+    BOOL   vs_const_b[NINE_MAX_CONST_B*4];
+    void  *vs_user_buffer_temp;
     uint32_t vs_key;
 
     struct NinePixelShader9 *ps;
-    float *ps_const_f;
-    int    ps_const_i[NINE_MAX_CONST_I][4];
-    BOOL   ps_const_b[NINE_MAX_CONST_B];
+    float  ps_const_f[NINE_MAX_CONST_F_PS3*4];
+    int    ps_const_i[NINE_MAX_CONST_I*4];
+    BOOL   ps_const_b[NINE_MAX_CONST_B*4];
+    void  *ps_user_buffer_temp;
     uint32_t ps_key;
 
     struct {

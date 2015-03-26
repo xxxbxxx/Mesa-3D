@@ -55,12 +55,10 @@ NineVertexShader9_ctor( struct NineVertexShader9 *This,
 
     info.type = PIPE_SHADER_VERTEX;
     info.byte_code = pFunction;
-    info.const_i_base = NINE_CONST_I_BASE(device->max_vs_const_f) / 16;
-    info.const_b_base = NINE_CONST_B_BASE(device->max_vs_const_f) / 16;
     info.sampler_mask_shadow = 0x0;
     info.sampler_ps1xtypes = 0x0;
 
-    hr = nine_translate_shader(device, &info);
+    hr = nine_translate_shader(device, &info, false);
     if (FAILED(hr))
         return hr;
     This->byte_code.version = info.version;
@@ -71,11 +69,16 @@ NineVertexShader9_ctor( struct NineVertexShader9 *This,
     This->byte_code.size = info.byte_size;
 
     This->variant.cso = info.cso;
-    This->const_used_size = info.const_used_size;
+    This->const_buffer_num_slots = info.const_buffer_num_slots;
+    if (info.num_remapped_slots > 0)
+        memcpy(This->const_slot_remaps, info.const_slot_remaps, info.num_remapped_slots * sizeof(struct nine_const_remap));
+    else
+        This->const_slot_remaps[0].type = NINE_CONST_TYPENOREMAP;
     This->lconstf = info.lconstf;
     This->sampler_mask = info.sampler_mask;
     This->position_t = info.position_t;
     This->point_size = info.point_size;
+    This->indirect_const_access = info.indirect_const_access;
 
     for (i = 0; i < info.num_inputs && i < Elements(This->input_map); ++i)
         This->input_map[i].ndecl = info.input_map[i];
@@ -135,17 +138,14 @@ NineVertexShader9_GetVariant( struct NineVertexShader9 *This,
 {
     void *cso = nine_shader_variant_get(&This->variant, key);
     if (!cso) {
-        struct NineDevice9 *device = This->base.device;
         struct nine_shader_info info;
         HRESULT hr;
 
         info.type = PIPE_SHADER_VERTEX;
-        info.const_i_base = NINE_CONST_I_BASE(device->max_vs_const_f) / 16;
-        info.const_b_base = NINE_CONST_B_BASE(device->max_vs_const_f) / 16;
         info.byte_code = This->byte_code.tokens;
         info.sampler_mask_shadow = key & 0xf;
 
-        hr = nine_translate_shader(This->base.device, &info);
+        hr = nine_translate_shader(This->base.device, &info, false);
         if (FAILED(hr))
             return NULL;
         nine_shader_variant_add(&This->variant, key, info.cso);

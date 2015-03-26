@@ -449,6 +449,8 @@ struct shader_translator
     boolean lower_preds;
     boolean want_texcoord;
     boolean shift_wpos;
+    boolean no_const_remap;
+    unsigned base_nonremapped_bool_slot;        // layout when not remapped is float / bool / int.
     unsigned texcoord_sn;
 
     struct sm1_instruction insn; /* current instruction */
@@ -508,6 +510,55 @@ struct shader_translator
 
 #define FAILURE_VOID(cond) if ((cond)) {tx->failure=1;return;}
 
+
+static int max(int a, int b) { return a < b ? b : a; }
+
+static int
+nine_use_const_slot(struct shader_translator *tx, int type, int idx)
+{
+    struct nine_shader_info *info = tx->info;
+    int slot;
+
+    switch(type) {
+    case NINE_CONST_TYPE_FLOAT:
+        info->max_used_f_slot = max(info->max_used_f_slot, idx+1);
+        slot = idx;
+        break;
+
+    case NINE_CONST_TYPE_BOOL:
+        info->max_used_b_slot = max(info->max_used_b_slot, idx+1);
+        slot = idx + tx->base_nonremapped_bool_slot;
+        break;
+
+    case NINE_CONST_TYPE_INT:
+        info->max_used_i_slot = max(info->max_used_i_slot, idx+1);
+        slot = idx + tx->base_nonremapped_bool_slot + NINE_MAX_CONST_B;
+        break;
+    }
+
+    return slot;
+}
+
+static int
+nine_find_or_add_const_slot_remap(struct shader_translator *tx, int type, int idx)
+{
+    struct nine_shader_info *info = tx->info;
+    int num_slots = info->num_remapped_slots;
+    int slot;
+
+    (void)nine_use_const_slot(tx, type, idx);
+
+    for (slot=0; slot<num_slots; slot++) {
+        struct nine_const_remap remap = info->const_slot_remaps[slot];
+        if (remap.type == type && remap.idx == idx)
+            return slot;
+    }
+    info->const_slot_remaps[slot].type = type;
+    info->const_slot_remaps[slot].idx = idx;
+    info->num_remapped_slots = slot+1;
+    return slot;
+}
+
 static void
 sm1_read_semantic(struct shader_translator *, struct sm1_semantic *);
 
@@ -553,7 +604,7 @@ tx_lconsti(struct shader_translator *tx, struct ureg_src *src, INT index)
 static boolean
 tx_lconstb(struct shader_translator *tx, struct ureg_src *src, INT index)
 {
-   if (index < 0 || index >= NINE_MAX_CONST_B) {
+   if (index < 0 || index >= NINE_MAX_CONST_B*4) {
        tx->failure = TRUE;
        return FALSE;
    }
@@ -600,7 +651,7 @@ tx_set_lconsti(struct shader_translator *tx, INT index, int i[4])
 static void
 tx_set_lconstb(struct shader_translator *tx, INT index, BOOL b)
 {
-    FAILURE_VOID(index < 0 || index >= NINE_MAX_CONST_B)
+    FAILURE_VOID(index < 0 || index >= NINE_MAX_CONST_B*4)
     tx->lconstb[index].idx = index;
     tx->lconstb[index].reg = tx->native_integers ?
        ureg_imm1u(tx->ureg, b ? 0xffffffff : 0) :
@@ -835,12 +886,19 @@ tx_src_param(struct shader_translator *tx, const struct sm1_src_param *param)
         break;
     case D3DSPR_CONST:
         assert(!param->rel || IS_VS);
-        if (param->rel)
+        if (param->rel) {
             tx->indirect_const_access = TRUE;
+            tx->no_const_remap = TRUE;
+            if (tx->info->num_remapped_slots > 0)
+                tx->failure = TRUE;
+        }
         if (param->rel || !tx_lconstf(tx, &src, param->idx)) {
-            if (!param->rel)
-                nine_info_mark_const_f_used(tx->info, param->idx);
-            src = ureg_src_register(TGSI_FILE_CONSTANT, param->idx);
+            if (tx->no_const_remap)
+                src = ureg_src_register(TGSI_FILE_CONSTANT,
+                                        nine_use_const_slot(tx, NINE_CONST_TYPE_FLOAT, param->idx));
+            else
+                src = ureg_src_register(TGSI_FILE_CONSTANT,
+                                        nine_find_or_add_const_slot_remap(tx, NINE_CONST_TYPE_FLOAT, param->idx));
         }
         if (!IS_VS && tx->version.major < 2) {
             /* ps 1.X clamps constants */
@@ -861,9 +919,12 @@ tx_src_param(struct shader_translator *tx, const struct sm1_src_param *param)
         /* relative adressing only possible for float constants in vs */
         assert(!param->rel);
         if (!tx_lconsti(tx, &src, param->idx)) {
-            nine_info_mark_const_i_used(tx->info, param->idx);
-            src = ureg_src_register(TGSI_FILE_CONSTANT,
-                                    tx->info->const_i_base + param->idx);
+            if (tx->no_const_remap)
+                src = ureg_src_register(TGSI_FILE_CONSTANT,
+                                        nine_use_const_slot(tx, NINE_CONST_TYPE_INT, param->idx));
+            else
+                src = ureg_src_register(TGSI_FILE_CONSTANT,
+                                        nine_find_or_add_const_slot_remap(tx, NINE_CONST_TYPE_INT, param->idx));
         }
         break;
     case D3DSPR_CONSTBOOL:
@@ -871,9 +932,12 @@ tx_src_param(struct shader_translator *tx, const struct sm1_src_param *param)
         if (!tx_lconstb(tx, &src, param->idx)) {
            char r = param->idx / 4;
            char s = param->idx & 3;
-           nine_info_mark_const_b_used(tx->info, param->idx);
-           src = ureg_src_register(TGSI_FILE_CONSTANT,
-                                   tx->info->const_b_base + r);
+           if (tx->no_const_remap)
+               src = ureg_src_register(TGSI_FILE_CONSTANT,
+                                       nine_use_const_slot(tx, NINE_CONST_TYPE_BOOL, r));
+           else
+               src = ureg_src_register(TGSI_FILE_CONSTANT,
+                                       nine_find_or_add_const_slot_remap(tx, NINE_CONST_TYPE_BOOL, r));
            src = ureg_swizzle(src, s, s, s, s);
         }
         break;
@@ -3139,9 +3203,10 @@ tx_ctor(struct shader_translator *tx, struct nine_shader_info *info)
     info->position_t = FALSE;
     info->point_size = FALSE;
 
-    tx->info->const_float_slots = 0;
-    tx->info->const_int_slots = 0;
-    tx->info->const_bool_slots = 0;
+    tx->info->num_remapped_slots = 0;
+    tx->info->max_used_f_slot = 0;
+    tx->info->max_used_b_slot = 0;
+    tx->info->max_used_i_slot = 0;
 
     info->sampler_mask = 0x0;
     info->rt_mask = 0x0;
@@ -3208,13 +3273,12 @@ tgsi_processor_from_type(unsigned shader_type)
       device->screen, info->type, PIPE_SHADER_CAP_##n)
 
 HRESULT
-nine_translate_shader(struct NineDevice9 *device, struct nine_shader_info *info)
+nine_translate_shader(struct NineDevice9 *device, struct nine_shader_info *info, bool forcenoremap)
 {
     struct shader_translator *tx;
     HRESULT hr = D3D_OK;
     const unsigned processor = tgsi_processor_from_type(info->type);
     unsigned s, slot_max;
-    unsigned max_const_f;
 
     user_assert(processor != ~0, D3DERR_INVALIDCALL);
 
@@ -3243,6 +3307,8 @@ nine_translate_shader(struct NineDevice9 *device, struct nine_shader_info *info)
         goto out;
     }
 
+//    forcenoremap = 1;
+
     tx->native_integers = GET_SHADER_CAP(INTEGERS);
     tx->inline_subroutines = !GET_SHADER_CAP(SUBROUTINES);
     tx->lower_preds = !GET_SHADER_CAP(MAX_PREDS);
@@ -3250,7 +3316,8 @@ nine_translate_shader(struct NineDevice9 *device, struct nine_shader_info *info)
     tx->shift_wpos = !GET_CAP(TGSI_FS_COORD_PIXEL_CENTER_INTEGER);
     tx->texcoord_sn = tx->want_texcoord ?
         TGSI_SEMANTIC_TEXCOORD : TGSI_SEMANTIC_GENERIC;
-
+    tx->no_const_remap = forcenoremap || !device->prefer_user_constbuf;
+    tx->base_nonremapped_bool_slot = device->max_vs_const_f;
     /* VS must always write position. Declare it here to make it the 1st output.
      * (Some drivers like nv50 are buggy and rely on that.)
      */
@@ -3267,6 +3334,13 @@ nine_translate_shader(struct NineDevice9 *device, struct nine_shader_info *info)
     tx->parse++; /* for byte_size */
 
     if (tx->failure) {
+        if (tx->no_const_remap && !(forcenoremap || !device->prefer_user_constbuf)) {
+            // TODO temp hack
+            // failed because remapped consts. retry with no_const_remap!
+            ureg_destroy(tx->ureg);
+            tx_dtor(tx);
+            return nine_translate_shader(device, info, true);
+        }
         ERR("Encountered buggy shader\n");
         ureg_destroy(tx->ureg);
         hr = D3DERR_INVALIDCALL;
@@ -3287,6 +3361,7 @@ nine_translate_shader(struct NineDevice9 *device, struct nine_shader_info *info)
     if (IS_VS && !ureg_dst_is_undef(tx->regs.oPts))
         info->point_size = TRUE;
 
+    info->indirect_const_access = tx->indirect_const_access;
     /* record local constants */
     if (tx->num_lconstf && tx->indirect_const_access) {
         struct nine_range *ranges;
@@ -3346,30 +3421,36 @@ nine_translate_shader(struct NineDevice9 *device, struct nine_shader_info *info)
     }
 
     /* r500 */
-    if (info->const_float_slots > device->max_vs_const_f &&
-        (info->const_int_slots || info->const_bool_slots))
-        ERR("Overlapping constant slots. The shader is likely to be buggy\n");
+    if (info->max_used_f_slot*sizeof(float[4]) >
+            (IS_VS ? device->vs_const_size : device->ps_const_size))
+        ERR("Overflown constant slots. The shader is likely to be buggy\n");
 
+    assert(!tx->no_const_remap || info->num_remapped_slots == 0) ;
 
-    if (tx->indirect_const_access) /* vs only */
-        info->const_float_slots = device->max_vs_const_f;
-
-    max_const_f = IS_VS ? device->max_vs_const_f : device->max_ps_const_f;
-    slot_max = info->const_bool_slots > 0 ?
-                   max_const_f + NINE_MAX_CONST_I
-                   + (info->const_bool_slots+3)/4 :
-                       info->const_int_slots > 0 ?
-                           max_const_f + info->const_int_slots :
-                               info->const_float_slots;
+    slot_max = info->num_remapped_slots;
+    if (tx->indirect_const_access || tx->no_const_remap) {
+        assert(!tx->indirect_const_access || IS_VS);
+        assert(info->num_remapped_slots == 0);
+        if (tx->indirect_const_access || tx->info->max_used_i_slot > 0 || tx->info->max_used_b_slot > 0)
+            slot_max = IS_VS ? device->max_vs_const_f : device->max_ps_const_f;  // will access any float const. (max_used_f_slot is irrelevant)
+        else
+            slot_max = tx->info->max_used_f_slot;
+        if (tx->info->max_used_i_slot > 0)
+            slot_max += NINE_MAX_CONST_B + tx->info->max_used_i_slot;
+        else
+            slot_max += tx->info->max_used_b_slot;
+    }
+    if (info->bumpenvmat_needed) {
+        assert(!IS_VS && tx->info->max_used_i_slot == 0 && tx->info->max_used_b_slot == 0 && tx->info->max_used_f_slot <= 8 + 8 + 4);
+        assert(info->num_remapped_slots == 0);
+        slot_max = 8 + 8 + 4; /* 8 for ps1_x + 8 for texbem + 4 for texbeml*/
+    }
     assert(IS_VS || tx->version.major > 1 || slot_max <= 8);
 
-    if (info->bumpenvmat_needed)
-        slot_max = 8 + 8 + 4; /* 8 for ps1_x + 8 for texbem + 4 for texbeml*/
-
-    info->const_used_size = sizeof(float[4]) * slot_max; /* slots start from 1 */
-
-    for (s = 0; s < slot_max; s++)
+    for (s = 0; s < slot_max; s++) {
         ureg_DECL_constant(tx->ureg, s);
+    }
+    info->const_buffer_num_slots = slot_max;
 
     if (debug_get_bool_option("NINE_TGSI_DUMP", FALSE)) {
         unsigned count;

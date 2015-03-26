@@ -26,6 +26,7 @@
 #include "d3d9types.h"
 #include "d3d9caps.h"
 #include "nine_defines.h"
+#include "nine_state.h"     // todo: NINE_MAX_CONST_ALL dans defines.h?
 #include "pipe/p_state.h" /* PIPE_MAX_ATTRIBS */
 #include "util/u_memory.h"
 
@@ -35,6 +36,18 @@ struct nine_lconstf /* NOTE: both pointers should be FREE'd by the user */
 {
     struct nine_range *ranges; /* single MALLOC, but next-pointers valid */
     float *data;
+};
+
+
+#define NINE_CONST_TYPE_FLOAT   0
+#define NINE_CONST_TYPE_INT     1
+#define NINE_CONST_TYPE_BOOL    2
+#define NINE_CONST_TYPENOREMAP  3
+
+struct nine_const_remap
+{
+    char type;
+    unsigned char idx;
 };
 
 struct nine_shader_info
@@ -59,39 +72,26 @@ struct nine_shader_info
     uint16_t sampler_mask_shadow; /* in, which samplers use depth compare */
     uint8_t rt_mask; /* out, which render targets are being written */
 
-    unsigned const_i_base; /* in vec4 (16 byte) units */
-    unsigned const_b_base; /* in vec4 (16 byte) units */
-    unsigned const_used_size;
+    // if constants are remapped to be packed
+    unsigned num_remapped_slots;
+    struct nine_const_remap const_slot_remaps[NINE_MAX_CONST_ALL];
 
-    unsigned const_float_slots;
-    unsigned const_int_slots;
-    unsigned const_bool_slots;
+    // otherwise:
+    unsigned max_used_f_slot;
+    unsigned max_used_b_slot;
+    unsigned max_used_i_slot;
+
+    unsigned const_buffer_num_slots; /* out: size of the oncstant buffer that'll be accessed by the shader */
+
 
     struct nine_lconstf lconstf; /* out, NOTE: members to be free'd by user */
     uint8_t bumpenvmat_needed;
+    boolean indirect_const_access;
 };
 
-static INLINE void
-nine_info_mark_const_f_used(struct nine_shader_info *info, int idx)
-{
-    if (info->const_float_slots < (idx + 1))
-        info->const_float_slots = idx + 1;
-}
-static INLINE void
-nine_info_mark_const_i_used(struct nine_shader_info *info, int idx)
-{
-    if (info->const_int_slots < (idx + 1))
-        info->const_int_slots = idx + 1;
-}
-static INLINE void
-nine_info_mark_const_b_used(struct nine_shader_info *info, int idx)
-{
-    if (info->const_bool_slots < (idx + 1))
-        info->const_bool_slots = idx + 1;
-}
 
 HRESULT
-nine_translate_shader(struct NineDevice9 *device, struct nine_shader_info *);
+nine_translate_shader(struct NineDevice9 *device, struct nine_shader_info *, bool forcenoremap);
 
 
 struct nine_shader_variant
